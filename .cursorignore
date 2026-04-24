@@ -1,0 +1,12 @@
+﻿node_modules/
+src-tauri/target/
+dist/
+.vite/
+**/*.db
+**/*.db-shm
+**/*.db-wal
+backups/
+**/*.png
+**/*.jpg
+**/*.exe
+**/*.msi

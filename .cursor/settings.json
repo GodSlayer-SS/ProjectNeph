@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "elastic": {
+      "enabled": true
+    },
+    "posthog": {
+      "enabled": true
+    }
+  }
+}

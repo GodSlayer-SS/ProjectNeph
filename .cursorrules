@@ -1,0 +1,25 @@
+# Project Neph — Cursor / agent rules (hard)
+
+## Trust and security
+
+- Do not add plaintext secret storage, env-based API key workarounds for production paths, or “temporary” fallbacks for keyring/DPAPI in user-facing flows. Refuse and surface an error.
+- **Yellow/red** risky actions are not complete until **backend** enforcement (confirmation token / plan hash) exists; the UI alone is not a gate. Until then, treat the current UI as **best-effort** and do not add new unsafe mutations without a test.
+- New file mutations must go through a **single path policy** (allowlist, canonicalization, traversal denial) when `SafePathPolicy` lands; do not add one-off `Path::new` + operation.
+
+## Data and schema
+
+- Any SQLite migration must be **forward-only** in shipped builds; new columns/tables get new **refinery** versions.
+- Do not hand-edit the DB in docs; use migrations.
+
+## Scope
+
+- The recovery plan in `.cursor/plans` is the **scope contract**. Large features (plugins, Ollama as default, extra providers) go through that plan or `docs/V0_2_PLAN.md` / `FUTURE.md`, not drive-by implementation.
+
+## Codebase hygiene
+
+- Prefer **splitting** `state` and other large modules over piling 800-line files; the CI guard flags Rust sources **> 500** lines in `src-tauri/src` (exclusions listed in the script).
+- IPC: follow `docs/IPC_BINDINGS.md` — new commands need TS binding updates in the same change until tauri-specta export is the source of truth.
+
+## Docs
+
+- `README` / `CHANGELOG` / `SECURITY` must not contradict each other on **alpha** vs **production-ready**. When in doubt, call it **alpha**.
