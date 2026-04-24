@@ -6,6 +6,48 @@ All notable changes to this project are recorded in this file.
 
 ### Added
 
+- Private-roadmap docs for the new direction: `PRIVATE_ROADMAP.md` and `REMAINING_BLUEPRINT_PLAN.md`.
+- Trust-core backend modules for current architecture goals:
+  - `src-tauri/src/model_router.rs`
+  - `src-tauri/src/agent.rs`
+  - `src-tauri/src/embeddings.rs`
+  - `src-tauri/src/network_allowlist.rs`
+  - `src-tauri/src/skills.rs`
+  - `src-tauri/src/ctx/*` (clipboard, active window, screenshot, OCR, snapshot composition)
+- New migration `V7__scheduled_jobs.sql` to support reminder/proactive scheduling flows.
+- Tool system modularization to `src-tauri/src/tools/` (`mod`, `risk`, `schema`, `preview`, `registry`).
+- New/expanded command surfaces and flows:
+  - `>ctx`, `>websearch`, `>webfetch`, `>codeexplain`, `>codefix`, `>pdfread`, `>repo`
+  - `>skills`, `>runskill`, `>dailybrief`, `>patch`, `>test`, `>voice`, `>snip`
+- Network egress telemetry (`neph_net`) and router decision telemetry (`neph_router`) for auditability.
+- Frontend streaming listeners for `llm:token`, `llm:done`, and `llm:error`, plus quick action buttons for context/screenshot/voice/brief.
+
+### Changed
+
+- Private pivot executed: public-launch/scaffolding docs and scripts were archived under `archive/pre-pivot/`; active docs now focus on private iteration.
+- Provider surface narrowed to `groq`, `gemini`, `openrouter` in both UI and backend allowlists; legacy OpenAI/Anthropic-first assumptions removed.
+- Tauri bundle/runtime path simplified for private use (updater/signing ceremony removed from active path).
+- LLM execution path upgraded from completion-only behavior to provider-native stream callbacks with token event propagation and retry/fallback behavior.
+- Sensitive input handling tightened so cloud routing short-circuits for detected secret-like content.
+- Web tooling hardened with explicit allowlist checks, timeout bounds, URL-per-turn limits, and response-size caps.
+- Memory/embedding diagnostics updated to fastembed-backed mode naming and re-embed startup path.
+- Verification scripts/CI flow simplified around practical private quality gates.
+
+### Removed
+
+- Legacy monolithic `src-tauri/src/tools.rs` replaced by modular `tools/` layout.
+- Public-launch artifacts from active tree (beta/launch/triage/signing/clean-VM/site content) moved out of active path to archive.
+
+### Fixed
+
+- Backend build/lint/test stability after large refactors:
+  - `cargo clippy --all-targets -- -D warnings` passes
+  - `cargo test` passes (security/routing/risk/confirmation suite)
+  - `npm run typecheck` passes
+- Security regression coverage expanded with adversarial and sensitive-routing test cases.
+
+### Added
+
 - **Docs:** `docs/BLUEPRINT_VS_REPO_2026-04.md` (external audit claims vs current code) and `docs/NEPH_TRUST_ROADMAP_v2.md` (prioritized next steps). Plan file `neph_trust-hardening_plan_6fd5acb6` updated with `ops-blueprint-reconcile-2026-04`.
 - **Test:** `state::runner::token_gate_tests::yellow_save_memory_requires_backend_token` — proves yellow `save_memory` requires a valid backend confirmation token (refutes outdated “frontend-only gate” narrative).
 
