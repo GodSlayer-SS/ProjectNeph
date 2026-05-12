@@ -211,6 +211,11 @@ fn provider_with_key(name: &str) -> Result<Option<(Box<dyn LlmProvider>, String)
                 return Ok(Some((Box::new(llm::OpenRouterProvider), key)));
             }
         }
+        "anthropic" => {
+            if let Some(key) = secrets::read_provider_key("anthropic")? {
+                return Ok(Some((Box::new(crate::llm_anthropic::AnthropicProvider), key)));
+            }
+        }
         _ => {}
     }
     Ok(None)

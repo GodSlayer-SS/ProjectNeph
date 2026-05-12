@@ -125,7 +125,22 @@ pub fn run_palette(
             message: "Phase 2 features are disabled. Set settings.phase2_enabled=1 to enable.".into(),
         });
     }
-    if matches!(plan.tool.as_str(), "toggle_voice" | "screenshot_analyze")
+    if matches!(
+        plan.tool.as_str(),
+        "toggle_voice"
+            | "screenshot_analyze"
+            | "browser_read_page"
+            | "browser_search"
+            | "browser_read_page_personal"
+            | "browser_search_personal"
+            | "browser_click"
+            | "browser_fill_form"
+            | "focus_window"
+            | "type_in_active"
+            | "read_active"
+            | "organize_files_template"
+            | "code_companion_diff"
+    )
         && !feature_enabled(state, "phase3_enabled")
     {
         return Ok(PaletteRunResponse::Rejected {
@@ -135,6 +150,9 @@ pub fn run_palette(
     if matches!(
         plan.tool.as_str(),
         "list_skills" | "run_skill" | "patch_preview" | "run_project_tests" | "daily_brief"
+            | "toggle_wake_word"
+            | "toggle_mcp_bridge"
+            | "toggle_orb_v2"
     )
         && !feature_enabled(state, "phase4_enabled")
     {
@@ -170,7 +188,7 @@ pub fn run_palette(
     execute_plan(state, input, &routed, &plan, on_token)
 }
 
-fn execute_plan(
+pub(crate) fn execute_plan(
     state: &AppState,
     input: &str,
     routed: &RoutedIntent,
@@ -738,6 +756,228 @@ fn execute_plan(
             } else {
                 format!("Screenshot OCR:\n{}", text.chars().take(1200).collect::<String>())
             }
+        }
+        "browser_read_page" => {
+            let url = plan.args["url"].as_str().unwrap_or_default().trim();
+            let profile = plan.args["profile"]
+                .as_str()
+                .unwrap_or("nephis-research")
+                .trim();
+            if url.is_empty() {
+                "Usage: >browse <url>".into()
+            } else {
+                let client = crate::ipc::nodeside::NodesideClient::connect()
+                    .map_err(|e| e.to_string())?;
+                let (title, text) = client
+                    .browser_read_page(profile, url)
+                    .map_err(|e| e.to_string())?;
+                format!("Page: {title}\n\n{}", text.chars().take(1800).collect::<String>())
+            }
+        }
+        "browser_search" => {
+            let query = plan.args["query"].as_str().unwrap_or_default().trim();
+            let profile = plan.args["profile"]
+                .as_str()
+                .unwrap_or("nephis-research")
+                .trim();
+            if query.is_empty() {
+                "Usage: >bsearch <query>".into()
+            } else {
+                let client = crate::ipc::nodeside::NodesideClient::connect()
+                    .map_err(|e| e.to_string())?;
+                let (title, text) = client
+                    .browser_search(profile, query)
+                    .map_err(|e| e.to_string())?;
+                format!("Search: {title}\n\n{}", text.chars().take(1800).collect::<String>())
+            }
+        }
+        "browser_read_page_personal" => {
+            let url = plan.args["url"].as_str().unwrap_or_default().trim();
+            let profile = "nephis-personal";
+            if url.is_empty() {
+                "Usage: >browse-personal <url>".into()
+            } else {
+                let client = crate::ipc::nodeside::NodesideClient::connect()
+                    .map_err(|e| e.to_string())?;
+                let (title, text) = client
+                    .browser_read_page(profile, url)
+                    .map_err(|e| e.to_string())?;
+                format!("Personal Page: {title}\n\n{}", text.chars().take(1500).collect::<String>())
+            }
+        }
+        "browser_search_personal" => {
+            let query = plan.args["query"].as_str().unwrap_or_default().trim();
+            let profile = "nephis-personal";
+            if query.is_empty() {
+                "Usage: >bsearch-personal <query>".into()
+            } else {
+                let client = crate::ipc::nodeside::NodesideClient::connect()
+                    .map_err(|e| e.to_string())?;
+                let (title, text) = client
+                    .browser_search(profile, query)
+                    .map_err(|e| e.to_string())?;
+                format!("Personal Search: {title}\n\n{}", text.chars().take(1500).collect::<String>())
+            }
+        }
+        "browser_click" => {
+            let url = plan.args["url"].as_str().unwrap_or_default().trim();
+            let selector = plan.args["selector"].as_str().unwrap_or_default().trim();
+            let profile = plan.args["profile"].as_str().unwrap_or("nephis-tools").trim();
+            if url.is_empty() || selector.is_empty() {
+                "Usage: >bclick <url>|<selector>".into()
+            } else {
+                let client = crate::ipc::nodeside::NodesideClient::connect()
+                    .map_err(|e| e.to_string())?;
+                let (title, text) = client
+                    .browser_click(profile, url, selector)
+                    .map_err(|e| e.to_string())?;
+                format!("Clicked on {title}\n\n{}", text.chars().take(1500).collect::<String>())
+            }
+        }
+        "browser_fill_form" => {
+            let url = plan.args["url"].as_str().unwrap_or_default().trim();
+            let fields = plan.args.get("fields").cloned().unwrap_or_else(|| serde_json::json!({}));
+            let submit_selector = plan.args["submit_selector"].as_str().map(|s| s.trim()).filter(|s| !s.is_empty());
+            let profile = plan.args["profile"].as_str().unwrap_or("nephis-tools").trim();
+            if url.is_empty() {
+                "Usage: >bfill <url>|<fields_json>|<submit_selector?>".into()
+            } else {
+                let client = crate::ipc::nodeside::NodesideClient::connect()
+                    .map_err(|e| e.to_string())?;
+                let (title, text) = client
+                    .browser_fill_form(profile, url, &fields, submit_selector)
+                    .map_err(|e| e.to_string())?;
+                format!("Form filled on {title}\n\n{}", text.chars().take(1500).collect::<String>())
+            }
+        }
+        "read_active" => crate::actors::automation::desktop_read_active(),
+        "focus_window" => {
+            let query = plan.args["query"].as_str().unwrap_or_default();
+            crate::actors::automation::desktop_focus_window(query)
+        }
+        "type_in_active" => {
+            let text = plan.args["text"].as_str().unwrap_or_default();
+            crate::actors::automation::desktop_type_in_active(text)
+        }
+        "organize_files_template" => {
+            let root = plan.args["root"].as_str().unwrap_or_default().trim();
+            let dry_run = plan.args["dry_run"].as_bool().unwrap_or(false);
+            if root.is_empty() {
+                "Usage: >organize <root_dir>".into()
+            } else {
+                let root_pb = SafePathPolicy::validate_user_path(root, true).map_err(|e| e.to_string())?;
+                if !root_pb.is_dir() {
+                    return Ok(PaletteRunResponse::Rejected {
+                        message: "organize root must be an existing directory".into(),
+                    });
+                }
+                let classify = |name: &str| -> &'static str {
+                    let lower = name.to_ascii_lowercase();
+                    if lower.ends_with(".png")
+                        || lower.ends_with(".jpg")
+                        || lower.ends_with(".jpeg")
+                        || lower.ends_with(".webp")
+                        || lower.ends_with(".gif")
+                    {
+                        "Images"
+                    } else if lower.ends_with(".pdf")
+                        || lower.ends_with(".doc")
+                        || lower.ends_with(".docx")
+                        || lower.ends_with(".txt")
+                        || lower.ends_with(".md")
+                    {
+                        "Docs"
+                    } else if lower.ends_with(".zip")
+                        || lower.ends_with(".rar")
+                        || lower.ends_with(".7z")
+                        || lower.ends_with(".tar")
+                    {
+                        "Archives"
+                    } else if lower.ends_with(".mp3")
+                        || lower.ends_with(".wav")
+                        || lower.ends_with(".m4a")
+                        || lower.ends_with(".mp4")
+                        || lower.ends_with(".mkv")
+                    {
+                        "Media"
+                    } else {
+                        "Other"
+                    }
+                };
+
+                let mut moved = 0usize;
+                for entry in fs::read_dir(&root_pb).map_err(|e| e.to_string())? {
+                    let entry = entry.map_err(|e| e.to_string())?;
+                    let path = entry.path();
+                    if !path.is_file() {
+                        continue;
+                    }
+                    let name = path.file_name().and_then(|s| s.to_str()).unwrap_or_default();
+                    if name.is_empty() {
+                        continue;
+                    }
+                    let bucket = classify(name);
+                    let target_dir = root_pb.join(bucket);
+                    let target_path = target_dir.join(name);
+                    if !dry_run {
+                        fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+                        if !target_path.exists() {
+                            fs::rename(&path, &target_path).map_err(|e| win_compat::format_io_error(e, "Organize move failed"))?;
+                        } else {
+                            continue;
+                        }
+                    }
+                    moved += 1;
+                }
+                if dry_run {
+                    format!("Organizer preview: {moved} files would be moved into template buckets (Images/Docs/Archives/Media/Other)")
+                } else {
+                    format!("Organizer complete: moved {moved} files into template buckets (Images/Docs/Archives/Media/Other)")
+                }
+            }
+        }
+        "code_companion_diff" => {
+            let request = plan.args["request"].as_str().unwrap_or_default().trim();
+            if request.is_empty() {
+                "Usage: >companion <change request>".into()
+            } else {
+                let prompt = format!(
+                    "You are Nephis code companion. Produce a concise diff-like proposal with:\n\
+                     1) target files\n2) minimal patch intent\n3) safety notes.\n\
+                     Keep it actionable and short.\n\nRequest:\n{request}"
+                );
+                if let Some(cb) = on_token {
+                    state
+                        .run_text_tool("rewrite", &prompt, Some(cb))
+                        .map_err(|e| e.to_string())?
+                } else {
+                    state
+                        .run_text_tool("rewrite", &prompt, None)
+                        .map_err(|e| e.to_string())?
+                }
+            }
+        }
+        "toggle_wake_word" => {
+            let enabled = plan.args["enabled"].as_bool().unwrap_or(false);
+            crate::db::write_setting(&state.db_path, "wake_word_enabled", if enabled { "1" } else { "0" })
+                .map_err(|e| e.to_string())?;
+            if enabled {
+                "Wake-word scaffold enabled (openWakeWord path placeholder active). Push-to-talk remains available as fallback.".into()
+            } else {
+                "Wake-word scaffold disabled. Push-to-talk is active.".into()
+            }
+        }
+        "toggle_mcp_bridge" => {
+            let enabled = plan.args["enabled"].as_bool().unwrap_or(false);
+            crate::db::write_setting(&state.db_path, "mcp_enabled", if enabled { "1" } else { "0" })
+                .map_err(|e| e.to_string())?;
+            format!("MCP bridge {}", if enabled { "enabled" } else { "disabled" })
+        }
+        "toggle_orb_v2" => {
+            let enabled = plan.args["enabled"].as_bool().unwrap_or(false);
+            crate::db::write_setting(&state.db_path, "orb_v2_enabled", if enabled { "1" } else { "0" })
+                .map_err(|e| e.to_string())?;
+            format!("Orb v2 {}", if enabled { "enabled" } else { "disabled" })
         }
         _ => "Unknown command.".to_string(),
     };

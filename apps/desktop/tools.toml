@@ -1,0 +1,546 @@
+# Nephis Tool Manifest — tools.toml
+# Loaded at startup. The risk map and schema validate against these entries.
+# Hard rule: to add a tool, add it here first. Never add it only in Rust code.
+#
+# Schema per tool:
+#   name        = unique tool ID (snake_case)
+#   risk        = "green" | "yellow" | "red"
+#   description = what the LLM planner reads to decide when to use this tool
+#   domain      = execution domain handle (see domains/ module)
+#   egress      = list of allowed hostnames ([] = no network)
+#   phase       = minimum phase required (1–4); gated in runner.rs
+#
+# [tool.args] declares required/optional fields for schema validation.
+# type = "string" | "integer" | "boolean"
+
+# ── Notes ─────────────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "create_note"
+risk = "green"
+description = "Create a plain-text note saved to the local database."
+domain = "workspace"
+egress = []
+phase = 1
+
+[tool.args]
+body = { type = "string", required = true, description = "Note content." }
+
+[[tool]]
+name = "list_notes"
+risk = "green"
+description = "List all notes (titles and IDs)."
+domain = "workspace"
+egress = []
+phase = 1
+
+[[tool]]
+name = "search_notes"
+risk = "green"
+description = "Search notes by keyword."
+domain = "workspace"
+egress = []
+phase = 1
+
+[tool.args]
+query = { type = "string", required = true, description = "Search term." }
+
+[[tool]]
+name = "update_note"
+risk = "yellow"
+description = "Replace the body of an existing note."
+domain = "workspace"
+egress = []
+phase = 1
+
+[tool.args]
+id   = { type = "integer", required = true, description = "Note ID." }
+body = { type = "string",  required = true, description = "New content." }
+
+[[tool]]
+name = "delete_note"
+risk = "yellow"
+description = "Delete a note by ID."
+domain = "workspace"
+egress = []
+phase = 1
+
+[tool.args]
+id = { type = "integer", required = true, description = "Note ID to delete." }
+
+# ── Memory ────────────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "save_memory"
+risk = "yellow"
+description = "Persist a fact, preference, or episode to long-term memory."
+domain = "workspace"
+egress = []
+phase = 1
+
+[tool.args]
+kind    = { type = "string", required = true,  description = "fact | preference | episode | procedural" }
+content = { type = "string", required = true,  description = "Memory content." }
+
+[[tool]]
+name = "retrieve_memory"
+risk = "green"
+description = "Retrieve the most relevant memories for a query."
+domain = "workspace"
+egress = []
+phase = 1
+
+[tool.args]
+query = { type = "string", required = true, description = "What to recall." }
+
+# ── Files ─────────────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "scan_files"
+risk = "green"
+description = "Index files in Documents, Downloads, and Desktop for search."
+domain = "personal"
+egress = []
+phase = 1
+
+[[tool]]
+name = "search_files"
+risk = "green"
+description = "Find files by name using the local index."
+domain = "personal"
+egress = []
+phase = 1
+
+[tool.args]
+query = { type = "string", required = true, description = "Filename search term." }
+
+[[tool]]
+name = "move_file"
+risk = "yellow"
+description = "Move a file from one path to another."
+domain = "personal"
+egress = []
+phase = 1
+
+[tool.args]
+from = { type = "string", required = true, description = "Source path." }
+to   = { type = "string", required = true, description = "Destination path." }
+
+[[tool]]
+name = "rename_file"
+risk = "yellow"
+description = "Rename a file in place."
+domain = "personal"
+egress = []
+phase = 1
+
+[tool.args]
+path     = { type = "string", required = true, description = "File to rename." }
+new_name = { type = "string", required = true, description = "New filename (not full path)." }
+
+[[tool]]
+name = "delete_file"
+risk = "red"
+description = "Move a file to the Recycle Bin."
+domain = "personal"
+egress = []
+phase = 1
+
+[tool.args]
+path = { type = "string", required = true, description = "File to delete." }
+
+[[tool]]
+name = "pdf_read"
+risk = "green"
+description = "Extract text from a local PDF file."
+domain = "personal"
+egress = []
+phase = 1
+
+[tool.args]
+path = { type = "string", required = true, description = "Path to PDF." }
+
+# ── Apps ──────────────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "scan_apps"
+risk = "green"
+description = "Refresh the local app index (Start Menu, PATH, common folders)."
+domain = "system"
+egress = []
+phase = 1
+
+[[tool]]
+name = "launch_app"
+risk = "green"
+description = "Launch an installed application by name."
+domain = "system"
+egress = []
+phase = 1
+
+[tool.args]
+query = { type = "string", required = true, description = "App name to search for." }
+
+# ── LLM text tools ────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "summarize"
+risk = "green"
+description = "Summarize a block of text in concise bullet points."
+domain = "none"
+egress = ["api.groq.com", "generativelanguage.googleapis.com", "openrouter.ai", "api.anthropic.com"]
+phase = 1
+
+[tool.args]
+text = { type = "string", required = true, description = "Text to summarize." }
+
+[[tool]]
+name = "rewrite"
+risk = "green"
+description = "Rewrite text for clarity and brevity."
+domain = "none"
+egress = ["api.groq.com", "generativelanguage.googleapis.com", "openrouter.ai", "api.anthropic.com"]
+phase = 1
+
+[tool.args]
+text = { type = "string", required = true, description = "Text to rewrite." }
+
+[[tool]]
+name = "code_explain"
+risk = "green"
+description = "Explain a block of code in plain English."
+domain = "none"
+egress = ["api.groq.com", "generativelanguage.googleapis.com", "openrouter.ai", "api.anthropic.com"]
+phase = 2
+
+[tool.args]
+text = { type = "string", required = true, description = "Code to explain." }
+
+[[tool]]
+name = "code_fix"
+risk = "yellow"
+description = "Suggest a patch for code or an error message."
+domain = "none"
+egress = ["api.groq.com", "generativelanguage.googleapis.com", "openrouter.ai", "api.anthropic.com"]
+phase = 2
+
+[tool.args]
+text = { type = "string", required = true, description = "Code or error to fix." }
+
+# ── Web ───────────────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "web_search"
+risk = "green"
+description = "Search DuckDuckGo and return a result summary."
+domain = "none"
+egress = ["duckduckgo.com", "html.duckduckgo.com"]
+phase = 2
+
+[tool.args]
+query = { type = "string", required = true, description = "Search query." }
+
+[[tool]]
+name = "web_fetch"
+risk = "green"
+description = "Fetch and preview the text content of a URL."
+domain = "none"
+egress = ["*"]   # enforced at runtime via network_allowlist
+phase = 2
+
+[tool.args]
+url = { type = "string", required = true, description = "URL to fetch." }
+
+# ── System / Utility ──────────────────────────────────────────────────────────
+
+[[tool]]
+name = "system_info"
+risk = "green"
+description = "Return CPU, RAM, and OS information."
+domain = "system"
+egress = []
+phase = 2
+
+[[tool]]
+name = "context_snapshot"
+risk = "green"
+description = "Return active window, active process, and clipboard preview."
+domain = "system"
+egress = []
+phase = 2
+
+[[tool]]
+name = "screenshot_analyze"
+risk = "green"
+description = "Capture the screen and run OCR."
+domain = "system"
+egress = []
+phase = 3
+
+# ── Browser (Phase 3) ─────────────────────────────────────────────────────────
+
+[[tool]]
+name = "browser_read_page"
+risk = "green"
+description = "Open a URL in isolated browser profile and extract readable page text."
+domain = "browser-research"
+egress = ["*"]
+phase = 3
+
+[tool.args]
+url = { type = "string", required = true, description = "URL to open." }
+profile = { type = "string", required = false, description = "nephis-research|nephis-tools|nephis-personal|nephis-throwaway" }
+
+[[tool]]
+name = "browser_search"
+risk = "green"
+description = "Search the web in isolated browser profile and return text snapshot."
+domain = "browser-research"
+egress = ["duckduckgo.com", "html.duckduckgo.com"]
+phase = 3
+
+[tool.args]
+query = { type = "string", required = true, description = "Search query." }
+profile = { type = "string", required = false, description = "nephis-research|nephis-tools|nephis-personal|nephis-throwaway" }
+
+[[tool]]
+name = "browser_read_page_personal"
+risk = "red"
+description = "Open a URL in personal profile (explicit directive only)."
+domain = "browser-personal"
+egress = ["*"]
+phase = 3
+
+[tool.args]
+url = { type = "string", required = true, description = "URL to open." }
+profile = { type = "string", required = false, description = "must be nephis-personal" }
+explicit_personal = { type = "boolean", required = true, description = "Must be true for personal profile actions." }
+
+[[tool]]
+name = "browser_search_personal"
+risk = "red"
+description = "Search web in personal profile (explicit directive only)."
+domain = "browser-personal"
+egress = ["duckduckgo.com", "html.duckduckgo.com"]
+phase = 3
+
+[tool.args]
+query = { type = "string", required = true, description = "Search query." }
+profile = { type = "string", required = false, description = "must be nephis-personal" }
+explicit_personal = { type = "boolean", required = true, description = "Must be true for personal profile actions." }
+
+[[tool]]
+name = "browser_click"
+risk = "yellow"
+description = "Open page and click selector in isolated browser profile."
+domain = "browser-tools"
+egress = ["*"]
+phase = 3
+
+[tool.args]
+url = { type = "string", required = true, description = "URL to open." }
+selector = { type = "string", required = true, description = "CSS selector to click." }
+profile = { type = "string", required = false, description = "nephis-tools or nephis-research" }
+
+[[tool]]
+name = "browser_fill_form"
+risk = "yellow"
+description = "Open page and fill fields map in isolated profile."
+domain = "browser-tools"
+egress = ["*"]
+phase = 3
+
+[tool.args]
+url = { type = "string", required = true, description = "URL to open." }
+fields = { type = "string", required = true, description = "JSON object map of selector->value." }
+submit_selector = { type = "string", required = false, description = "Optional CSS selector to submit." }
+profile = { type = "string", required = false, description = "nephis-tools or nephis-research" }
+
+[[tool]]
+name = "focus_window"
+risk = "yellow"
+description = "Focus a desktop window by title or process hint."
+domain = "system"
+egress = []
+phase = 3
+
+[tool.args]
+query = { type = "string", required = true, description = "Window title or process hint." }
+
+[[tool]]
+name = "type_in_active"
+risk = "yellow"
+description = "Type text into currently focused app (desktop automation)."
+domain = "system"
+egress = []
+phase = 3
+
+[tool.args]
+text = { type = "string", required = true, description = "Text to type." }
+
+[[tool]]
+name = "read_active"
+risk = "green"
+description = "Read current active window/process context."
+domain = "system"
+egress = []
+phase = 3
+
+[[tool]]
+name = "organize_files_template"
+risk = "yellow"
+description = "Organize files in a single root directory using fixed template buckets."
+domain = "personal"
+egress = []
+phase = 3
+
+[tool.args]
+root = { type = "string", required = true, description = "Directory to organize." }
+dry_run = { type = "boolean", required = false, description = "Preview only without moving files." }
+
+[[tool]]
+name = "code_companion_diff"
+risk = "yellow"
+description = "Generate a concise diff-style patch proposal for a coding request."
+domain = "workspace"
+egress = ["api.groq.com", "generativelanguage.googleapis.com", "openrouter.ai", "api.anthropic.com"]
+phase = 3
+
+[tool.args]
+request = { type = "string", required = true, description = "Requested code change." }
+
+[[tool]]
+name = "toggle_wake_word"
+risk = "yellow"
+description = "Toggle wake-word scaffold. Falls back to push-to-talk when disabled."
+domain = "none"
+egress = []
+phase = 4
+
+[tool.args]
+enabled = { type = "boolean", required = true, description = "true to enable wake-word scaffold." }
+
+[[tool]]
+name = "toggle_mcp_bridge"
+risk = "yellow"
+description = "Toggle MCP bridge foundation availability."
+domain = "workspace"
+egress = []
+phase = 4
+
+[tool.args]
+enabled = { type = "boolean", required = true, description = "true to enable MCP bridge modules." }
+
+[[tool]]
+name = "toggle_orb_v2"
+risk = "yellow"
+description = "Toggle Orb v2 rendering path."
+domain = "workspace"
+egress = []
+phase = 4
+
+[tool.args]
+enabled = { type = "boolean", required = true, description = "true to enable Orb v2." }
+
+[[tool]]
+name = "schedule_reminder"
+risk = "yellow"
+description = "Schedule a reminder message in N minutes or hours."
+domain = "workspace"
+egress = []
+phase = 2
+
+[tool.args]
+raw = { type = "string", required = true, description = "e.g. '10m standup'" }
+
+[[tool]]
+name = "undo_action"
+risk = "green"
+description = "Undo the last reversible action (file move, rename, etc.)."
+domain = "workspace"
+egress = []
+phase = 1
+
+# ── Dev / Agent ───────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "patch_preview"
+risk = "yellow"
+description = "Generate a diff preview for a described code change. Dry-run only."
+domain = "workspace"
+egress = ["api.groq.com", "generativelanguage.googleapis.com", "openrouter.ai", "api.anthropic.com"]
+phase = 4
+
+[tool.args]
+raw = { type = "string", required = true, description = "Description of the change." }
+
+[[tool]]
+name = "run_project_tests"
+risk = "green"
+description = "Run `cargo test` in the current project directory."
+domain = "workspace"
+egress = []
+phase = 4
+
+[[tool]]
+name = "agent_dry_run"
+risk = "green"
+description = "Validate a JSON array of planned steps without executing them."
+domain = "none"
+egress = []
+phase = 1
+
+[tool.args]
+steps_json = { type = "string", required = true, description = "JSON array of PlannedStep objects." }
+
+# ── Skills ────────────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "list_skills"
+risk = "green"
+description = "List all procedural skills in ~/.neph/skills."
+domain = "workspace"
+egress = []
+phase = 4
+
+[[tool]]
+name = "run_skill"
+risk = "yellow"
+description = "Execute a named procedural skill."
+domain = "workspace"
+egress = []
+phase = 4
+
+[tool.args]
+name = { type = "string", required = true, description = "Skill name." }
+
+# ── Voice ─────────────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "toggle_voice"
+risk = "green"
+description = "Toggle voice mode on or off."
+domain = "none"
+egress = []
+phase = 1
+
+# ── Repo ─────────────────────────────────────────────────────────────────────
+
+[[tool]]
+name = "repo_index"
+risk = "green"
+description = "Index all files in a code repository for search."
+domain = "personal"
+egress = []
+phase = 2
+
+[tool.args]
+path = { type = "string", required = true, description = "Root path of the repository." }
+
+[[tool]]
+name = "daily_brief"
+risk = "green"
+description = "Return a morning brief: notes count, memories, pending reminders."
+domain = "workspace"
+egress = []
+phase = 2

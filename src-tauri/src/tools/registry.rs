@@ -75,6 +75,20 @@ pub fn build_registry() -> HashMap<&'static str, Box<dyn ToolDefinition>> {
         "run_skill",
         "toggle_voice",
         "screenshot_analyze",
+        "browser_read_page",
+        "browser_search",
+        "browser_read_page_personal",
+        "browser_search_personal",
+        "browser_click",
+        "browser_fill_form",
+        "focus_window",
+        "type_in_active",
+        "read_active",
+        "organize_files_template",
+        "code_companion_diff",
+        "toggle_wake_word",
+        "toggle_mcp_bridge",
+        "toggle_orb_v2",
     ] {
         map.insert(name, register(name));
     }

@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Neph",
-        "width": 640,
-        "height": 420,
+        "width": 720,
+        "height": 560,
         "resizable": false,
         "decorations": false,
         "alwaysOnTop": true,
@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://api.groq.com https://generativelanguage.googleapis.com https://openrouter.ai; img-src 'self' asset: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self';"
+      "csp": "default-src 'self'; connect-src 'self' https://api.groq.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.anthropic.com; img-src 'self' asset: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self';"
     }
   },
   "bundle": {

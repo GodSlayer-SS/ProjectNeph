@@ -1,0 +1,14 @@
+{
+  "name": "nephis-nodeside",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Nephis browser sidecar (Playwright)",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}
+

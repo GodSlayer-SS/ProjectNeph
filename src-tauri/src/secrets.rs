@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 const SERVICE_PREFIX: &str = "Neph";
-const ALLOWED_PROVIDERS: &[&str] = &["groq", "gemini", "openrouter"];
+const ALLOWED_PROVIDERS: &[&str] = &["groq", "gemini", "openrouter", "anthropic"];
 
 fn assert_allowed_provider(provider: &str) -> Result<()> {
     if ALLOWED_PROVIDERS.contains(&provider) {

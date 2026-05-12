@@ -14,6 +14,34 @@ pub struct CompletionRequest {
     pub json_mode: bool,
 }
 
+impl CompletionRequest {
+    /// Compat adapter: convert a `traits::llm::ChatRequest` (new stable interface)
+    /// into the legacy `CompletionRequest` used by existing provider code.
+    /// System message becomes `system`, last user message becomes `user`.
+    pub fn from_chat_request(req: &crate::traits::llm::ChatRequest) -> Self {
+        let system = req
+            .messages
+            .iter()
+            .find(|m| m.role == "system")
+            .map(|m| m.content.clone())
+            .unwrap_or_default();
+        let user = req
+            .messages
+            .iter()
+            .rfind(|m| m.role == "user")
+            .map(|m| m.content.clone())
+            .unwrap_or_default();
+        Self {
+            system,
+            user,
+            model: req.model.clone(),
+            temperature: req.temperature,
+            max_tokens: req.max_tokens,
+            json_mode: req.json_mode,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompletionResponse {
     pub text: String,

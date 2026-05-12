@@ -1,8 +1,10 @@
+pub mod manifest;
 pub mod preview;
 pub mod registry;
 pub mod risk;
 pub mod schema;
 
+pub use manifest::Manifest;
 pub use preview::{dry_run_preview, redact_args_for_tool};
 pub use registry::build_registry;
 pub use risk::tool_risk;
@@ -49,6 +51,20 @@ mod tests {
             ("repo_index", json!({"path":"C:/tmp/repo"})),
             ("schedule_reminder", json!({"raw":"10m standup"})),
             ("patch_preview", json!({"raw":"improve error handling"})),
+            ("browser_read_page", json!({"url":"https://example.com"})),
+            ("browser_search", json!({"query":"rust"})),
+            ("browser_read_page_personal", json!({"url":"https://example.com","explicit_personal":true})),
+            ("browser_search_personal", json!({"query":"rust","explicit_personal":true})),
+            ("browser_click", json!({"url":"https://example.com","selector":"a"})),
+            ("browser_fill_form", json!({"url":"https://example.com","fields":{"input[name=q]":"rust"}})),
+            ("focus_window", json!({"query":"Notepad"})),
+            ("type_in_active", json!({"text":"hello"})),
+            ("read_active", json!({})),
+            ("organize_files_template", json!({"root":"C:/Users/mohit/Downloads","dry_run":true})),
+            ("code_companion_diff", json!({"request":"refactor auth middleware and add tests"})),
+            ("toggle_wake_word", json!({"enabled":true})),
+            ("toggle_mcp_bridge", json!({"enabled":true})),
+            ("toggle_orb_v2", json!({"enabled":true})),
         ];
         for (tool, args) in cases {
             assert!(validate_tool_schema(tool, &args).is_ok(), "schema failed for {tool}");

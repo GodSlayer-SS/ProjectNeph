@@ -13,7 +13,7 @@
 
 ## Scope
 
-- The recovery plan in `.cursor/plans` is the **scope contract**. Large features (plugins, Ollama as default, extra providers) go through that plan or `docs/V0_2_PLAN.md` / `FUTURE.md`, not drive-by implementation.
+- **`Blueprint.md`** at the repo root is the **product scope contract**. Large features (plugins, local LLM defaults, extra providers) go through that blueprint, `.cursor/plans`, or `docs/FUTURE.md`, not drive-by implementation.
 
 ## Codebase hygiene
 

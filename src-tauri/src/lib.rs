@@ -8,9 +8,13 @@ mod dpapi_win;
 mod embeddings;
 mod execution;
 mod files;
+/// Hotkey parsing — canonical code is in `actors::hotkey`; this shim keeps
+/// existing `hotkey::parse_hotkey` call sites compiling unchanged.
 mod hotkey;
 mod llm;
+mod llm_anthropic;
 mod model_router;
+mod mcp;
 mod models;
 mod network_allowlist;
 mod path_policy;
@@ -25,6 +29,29 @@ mod telemetry;
 mod tools;
 mod webview2;
 mod win_compat;
+
+// ── New architecture modules (Blueprint v2) ───────────────────────────────────
+/// The 8 stable interfaces — nothing outside `providers/` and `memory/`
+/// may import a concrete type; they depend only on these traits.
+pub mod traits;
+/// Tokio-based actor shells (Blueprint §4 — hotkey, voice, planner, executor,
+/// memory, automation, provider_router, ui_bridge).
+pub mod actors;
+/// Execution domain enforcement (filesystem, network, browser, shell).
+pub mod domains;
+/// IPC — named-pipe client to Python sidecar and typed Tauri event names.
+pub mod ipc;
+/// Memory tiers — Hot (session) + Warm (SQLite) + Cold (LanceDB embeddings, Phase 2).
+pub mod memory;
+/// In-process typed event bus — typed event name constants (Blueprint §4).
+pub mod bus;
+/// Concrete LLM provider implementations behind the trait wall (Blueprint §2, §4).
+/// ONLY this module may construct GeminiProvider, AnthropicProvider, etc.
+pub mod providers;
+/// Trust kernel components per Blueprint §4: risk, confirmation, path_policy, capabilities.
+pub mod safety;
+/// SQLite data layer — re-exports `crate::db` under the Blueprint §4 mandated `store` namespace.
+pub mod store;
 
 use std::path::Path;
 
@@ -64,6 +91,78 @@ fn spawn_wal_checkpoint_thread(db_path: std::path::PathBuf) {
     });
 }
 
+/// Auto-launch the Python ML sidecar (Blueprint §9 Phase 1, BUG-6 fix).
+///
+/// Spawns `python -m nephis_pyside.pipe_server` as a detached background process.
+/// Waits up to 2s for the named-pipe to become connectable, then sends a ping.
+/// Non-fatal: if the sidecar fails to start, voice will log a warning per call.
+fn launch_pyside_sidecar() {
+    use std::process::{Command, Stdio};
+    #[cfg(windows)]
+    use std::os::windows::process::CommandExt;
+
+    // If the pipe already exists (sidecar already running), skip re-launch.
+    // We check by trying to connect briefly — if successful, it's already up.
+    let already_running = ipc::pyside::PysideClient::ping_quick();
+    if already_running {
+        tracing::info!(target: "neph_sidecar", "pyside already running — skip launch");
+        return;
+    }
+
+    tracing::info!(target: "neph_sidecar", "launching Python ML sidecar...");
+
+    // On Windows, spawn with CREATE_NO_WINDOW so no console pops up.
+    #[cfg(windows)]
+    let result = {
+        use std::os::windows::process::CommandExt;
+        Command::new("python")
+            .args(["-m", "nephis_pyside.pipe_server"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .spawn()
+    };
+    #[cfg(not(windows))]
+    let result = Command::new("python")
+        .args(["-m", "nephis_pyside.pipe_server"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+
+    match result {
+        Ok(child) => {
+            tracing::info!(
+                target: "neph_sidecar",
+                pid = child.id(),
+                "pyside sidecar spawned"
+            );
+            // Give it time to start the pipe server before the first voice call.
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+                match ipc::pyside::PysideClient::ping_quick() {
+                    true => tracing::info!(target: "neph_sidecar", "pyside ping OK"),
+                    false => tracing::warn!(
+                        target: "neph_sidecar",
+                        "pyside ping failed after 1.5s — voice will not work. \
+                         Ensure Python is in PATH and nephis-pyside is installed: \
+                         `pip install -e apps/pyside`"
+                    ),
+                }
+            });
+        }
+        Err(e) => {
+            tracing::warn!(
+                target: "neph_sidecar",
+                error = %e,
+                "could not spawn pyside sidecar. Voice will not work. \
+                 Ensure Python is in PATH: `python -m nephis_pyside.pipe_server`"
+            );
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -79,6 +178,13 @@ pub fn run() {
             let (db_path, db_meta) = db::initialize_database(&data_root)
                 .map_err(|err| std::io::Error::other(err.to_string()))?;
             spawn_wal_checkpoint_thread(db_path.clone());
+
+            // ── Auto-launch Python ML sidecar (BUG-6 fix) ────────────────────
+            // Blueprint §9 Phase 1: "Spin up Python sidecar with named-pipe IPC."
+            // The sidecar must be running before voice can work. We spawn it
+            // as a detached background process and do a best-effort ping check.
+            // A failure is logged as a warning — the rest of the app continues.
+            launch_pyside_sidecar();
 
             #[cfg(windows)]
             {
@@ -109,9 +215,19 @@ pub fn run() {
             });
             let hotkey_id = hotkey.id();
 
+            // Voice push-to-talk hotkey: Alt+V
+            // Down = start listening, Up = stop and transcribe.
+            let voice_hotkey = {
+                use global_hotkey::hotkey::{Code, HotKey, Modifiers};
+                HotKey::new(Some(Modifiers::ALT), Code::KeyV)
+            };
+            let voice_hotkey_id = voice_hotkey.id();
+
             let app_handle = app.handle().clone();
+            let voice_app_handle = app.handle().clone();
             let hotkey_manager = GlobalHotKeyManager::new()?;
             hotkey_manager.register(hotkey)?;
+            hotkey_manager.register(voice_hotkey)?;
 
             app.manage(AppState::new(db_path, db_meta));
             std::mem::forget(hotkey_manager);
@@ -121,26 +237,161 @@ pub fn run() {
                 window.hide()?;
             }
 
+            // Create the VoiceActor once; it is Clone so the thread captures it.
+            let voice_actor = actors::voice::VoiceActor::new(voice_app_handle);
+            // Clone the barge-in token so the TTS listener can check it.
+            let barge_cancel = voice_actor.barge_cancel.clone();
+            let voice_actor_for_metrics = voice_actor.clone();
+
             std::thread::spawn(move || {
                 let receiver = GlobalHotKeyEvent::receiver();
 
                 while let Ok(event) = receiver.recv() {
-                    if event.id != hotkey_id {
-                        continue;
-                    }
-
-                    if let Some(window) = app_handle.get_webview_window("main") {
-                        let is_visible = window.is_visible().unwrap_or(false);
-
-                        if is_visible {
-                            let _ = window.hide();
-                        } else {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                    if event.id == hotkey_id {
+                        // Palette toggle (existing behaviour — unchanged).
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let is_visible = window.is_visible().unwrap_or(false);
+                            if is_visible {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    } else if event.id == voice_hotkey_id {
+                        // Push-to-talk: KeyState::Pressed → down, Released → up.
+                        use global_hotkey::HotKeyState;
+                        match event.state {
+                            HotKeyState::Pressed  => voice_actor.on_hotkey_down(),
+                            HotKeyState::Released => voice_actor.on_hotkey_up(),
                         }
                     }
                 }
             });
+
+            // Wire stt:final → PlannerActor.
+            // When the VoiceActor emits a final transcript, run it through the
+            // existing run_palette_command path so the response streams back to
+            // the UI via llm:token / llm:done events.
+            {
+                let stt_app = app.handle().clone();
+                let metrics_voice = voice_actor_for_metrics.clone();
+                stt_app.listen("stt:final", move |event| {
+                    #[derive(serde::Deserialize)]
+                    struct Payload { text: String }
+                    let Ok(payload) = serde_json::from_str::<Payload>(event.payload()) else {
+                        return;
+                    };
+                    let transcript = payload.text;
+                    if transcript.trim().is_empty() {
+                        return;
+                    }
+                    let plan_app = stt_app.clone();
+                    std::thread::spawn(move || {
+                        let state = plan_app.state::<AppState>();
+                        let llm_t0 = std::time::Instant::now();
+                        let mut first_token: Option<std::time::Instant> = None;
+                        let mut token_emitter = |chunk: &str| {
+                            if first_token.is_none() {
+                                first_token = Some(std::time::Instant::now());
+                                let llm_ms = llm_t0.elapsed().as_millis();
+                                metrics_voice.set_llm_first_token_ms(llm_ms);
+                            }
+                            let _ = plan_app.emit("llm:token", chunk);
+                        };
+
+                        let result = state.run_palette_command(&transcript, None, Some(&mut token_emitter));
+                        match result {
+                            Ok(models::PaletteRunResponse::Completed { output }) => {
+                                let _ = plan_app.emit("llm:done", output);
+                            }
+                            Ok(models::PaletteRunResponse::NeedConfirmation { preview, .. }) => {
+                                let _ = plan_app.emit("llm:done",
+                                    format!("[Confirmation needed] {preview}"));
+                            }
+                            Ok(models::PaletteRunResponse::Rejected { message }) => {
+                                let _ = plan_app.emit("llm:error", message);
+                            }
+                            Err(e) => {
+                                let _ = plan_app.emit("llm:error", e.to_string());
+                            }
+                        }
+                    });
+                });
+            }
+
+            // Wire llm:done → TTS via Python sidecar (barge-in aware).
+            // Falls back silently if sidecar is not running.
+            {
+                let tts_app = app.handle().clone();
+                let tts_cancel = barge_cancel.clone();
+                let metrics_voice = voice_actor.clone();
+                tts_app.listen("llm:done", move |event| {
+                    let raw = event.payload().to_string();
+                    let text = serde_json::from_str::<String>(&raw)
+                        .unwrap_or_else(|_| raw.trim_matches('"').to_string());
+                    if text.is_empty() || text.starts_with('[') {
+                        return;
+                    }
+                    let _ = tts_app.emit("voice:state", actors::voice::VoiceState::Speaking);
+                    let speak_app = tts_app.clone();
+                    let cancel_tok = tts_cancel.clone();
+                    let voice_for_latency = metrics_voice.clone();
+                    std::thread::spawn(move || {
+                        use crate::ipc::pyside::PysideClient;
+                        let tts_t0 = std::time::Instant::now();
+                        let client = match PysideClient::connect() {
+                            Ok(c) => c,
+                            Err(_) => {
+                                let _ = speak_app.emit("voice:state",
+                                    actors::voice::VoiceState::Idle);
+                                return;
+                            }
+                        };
+                        let speak_text: String = text.chars().take(600).collect();
+                        match client.tts_speak(&speak_text) {
+                            Ok(bytes) if !bytes.is_empty() => {
+                                let tts_first_audio_ms = tts_t0.elapsed().as_millis();
+                                let _ = speak_app.emit("voice:latency_tts_first_audio", tts_first_audio_ms);
+                                let total_ms = voice_for_latency
+                                    .voice_start_instant()
+                                    .map(|t| t.elapsed().as_millis())
+                                    .unwrap_or(0);
+                                let (stt_ms, llm_ms) = voice_for_latency.snapshot_latencies();
+                                let payload = actors::voice::VoiceLatency {
+                                    total_ms,
+                                    stt_ms: stt_ms.unwrap_or(0),
+                                    llm_ms: llm_ms.unwrap_or(0),
+                                };
+                                let _ = speak_app.emit("voice:latency", payload);
+
+                                // Phase 2: voice session audit + LLM-based admission control.
+                                // AdmissionController tries Gemini Flash first, falls back
+                                // to keyword heuristic if no key is available (Blueprint §7).
+                                if let Some(transcript) = voice_for_latency.last_transcript() {
+                                    let state = speak_app.state::<AppState>();
+                                    let _ = state.log_voice_session(Some(&transcript), total_ms);
+                                    // Run admission control off the hot path.
+                                    let admit_app = speak_app.clone();
+                                    let admit_transcript = transcript.clone();
+                                    std::thread::spawn(move || {
+                                        let state = admit_app.state::<AppState>();
+                                        run_post_session_admission(&state, &admit_transcript);
+                                    });
+                                }
+
+                                // play_audio_bytes handles MP3 and WAV via rodio (BUG-1 fix).
+                                if let Err(e) = play_audio_bytes(&bytes, &cancel_tok) {
+                                    tracing::warn!(target: "neph_tts", "playback: {e}");
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(e) => tracing::warn!(target: "neph_tts", "tts_speak: {e}"),
+                        }
+                        let _ = speak_app.emit("voice:state", actors::voice::VoiceState::Idle);
+                    });
+                });
+            }
 
             Ok(())
         })
@@ -154,6 +405,9 @@ pub fn run() {
             get_token_stats,
             report_issue_link,
             get_memory,
+            get_admission_queue,
+            keep_admission,
+            discard_admission,
             update_memory_item,
             toggle_memory_pin,
             delete_memory_item,
@@ -254,6 +508,21 @@ fn get_memory(
 }
 
 #[tauri::command]
+fn get_admission_queue(state: State<'_, AppState>) -> Result<Vec<models::AdmissionItem>, String> {
+    state.list_admission_queue().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn keep_admission(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
+    state.keep_admission_as_memory(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn discard_admission(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
+    state.discard_admission(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn update_memory_item(state: State<'_, AppState>, id: i64, content: String) -> Result<bool, String> {
     state.update_memory(id, &content).map_err(|err| err.to_string())
 }
@@ -327,6 +596,18 @@ fn get_startup_diagnostics(state: State<'_, AppState>) -> Result<models::Startup
         .map_err(|e| e.to_string())?
         .map(|v| v == "1")
         .unwrap_or(false);
+    let wake_word_enabled = db::read_setting(&state.db_path, "wake_word_enabled")
+        .map_err(|e| e.to_string())?
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    let mcp_enabled = db::read_setting(&state.db_path, "mcp_enabled")
+        .map_err(|e| e.to_string())?
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    let orb_v2_enabled = db::read_setting(&state.db_path, "orb_v2_enabled")
+        .map_err(|e| e.to_string())?
+        .map(|v| v == "1")
+        .unwrap_or(false);
     Ok(models::StartupDiagnostics {
         palette_hotkey,
         webview2_version,
@@ -337,6 +618,9 @@ fn get_startup_diagnostics(state: State<'_, AppState>) -> Result<models::Startup
         vector_search_enabled,
         embedding_mode,
         dpapi_protect_exports,
+        wake_word_enabled,
+        mcp_enabled,
+        orb_v2_enabled,
     })
 }
 
@@ -367,4 +651,126 @@ fn set_dpapi_protect_exports(state: State<'_, AppState>, enabled: bool) -> Resul
         if enabled { "1" } else { "0" },
     )
     .map_err(|e| e.to_string())
+}
+
+/// Play audio bytes (WAV or MP3) through the default output device.
+///
+/// **BUG-1 FIX**: The previous implementation manually parsed a RIFF WAV
+/// header from bytes[22..27]. EdgeTTS streams MP3 (not WAV), so this silently
+/// produced garbage/silence on every TTS response. `rodio` auto-detects the
+/// format from magic bytes and handles both WAV and MP3.
+///
+/// Cancellable: the caller passes a `CancelToken`; if it is set (barge-in)
+/// the playback stops within one poll tick (~20ms).
+fn play_audio_bytes(bytes: &[u8], cancel: &actors::cancel::CancelToken) -> anyhow::Result<()> {
+    use rodio::{Decoder, OutputStream, Sink};
+    use std::io::Cursor;
+
+    if bytes.is_empty() {
+        return Ok(());
+    }
+
+    // `OutputStream` must stay alive for the duration of playback.
+    let (_stream, stream_handle) = OutputStream::try_default()
+        .map_err(|e| anyhow::anyhow!("audio output unavailable: {e}"))?;
+
+    let sink = Sink::try_new(&stream_handle)
+        .map_err(|e| anyhow::anyhow!("could not create audio sink: {e}"))?;
+
+    // rodio auto-detects format from magic bytes (MP3 ID3/sync, RIFF WAV, OGG, etc.)
+    let cursor = Cursor::new(bytes.to_vec());
+    let source = Decoder::new(cursor)
+        .map_err(|e| anyhow::anyhow!("audio decode failed: {e} (bytes len={})", bytes.len()))?;
+
+    sink.append(source);
+
+    // Poll until done or cancelled (barge-in).
+    while !sink.empty() && !cancel.is_cancelled() {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    if cancel.is_cancelled() {
+        sink.stop();
+    }
+    // Dropping `sink` and `_stream` ends playback.
+    Ok(())
+}
+
+
+/// Post-session admission control (Blueprint §7).
+///
+/// Runs after each voice exchange: feeds the transcript through the LLM-based
+/// `AdmissionController`, which scores items and decides:
+///   approved   → immediately saved to warm memory
+///   for_review → enqueued to the UI admission_queue (user decides)
+///   rejected   → discarded
+///
+/// Falls back to keyword heuristic if no Gemini key is configured.
+fn run_post_session_admission(state: &AppState, transcript: &str) {
+    use crate::memory::admission::AdmissionController;
+    use crate::traits::memory::{MemoryItem, MemoryTier};
+
+    if transcript.trim().is_empty() {
+        return;
+    }
+
+    // Build a single-item list from the transcript.
+    let item = MemoryItem {
+        id: None,
+        kind: "episode".into(),
+        content: transcript.to_string(),
+        score: None,
+        tier: MemoryTier::Hot,
+        pinned: false,
+    };
+
+    // Try LLM distillation; fall back to heuristic automatically.
+    let api_key = secrets::read_provider_key("gemini")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+
+    let controller = AdmissionController::new();
+    let result = controller.run_distill_pass(&[item], &api_key);
+
+    match result {
+        Ok(admission) => {
+            // Approved → persist directly to warm memory.
+            for mem in &admission.approved {
+                let _ = state.save_memory(&mem.kind, &mem.content);
+                tracing::debug!(
+                    target: "neph_memory",
+                    kind = %mem.kind,
+                    "admission: auto-approved to warm memory"
+                );
+            }
+            // For-review → enqueue in UI admission_queue.
+            for candidate in &admission.queued_for_review {
+                let _ = state.enqueue_admission_candidate(
+                    &candidate.content,
+                    Some(&candidate.kind),
+                    Some(candidate.score),
+                );
+                tracing::debug!(
+                    target: "neph_memory",
+                    score = candidate.score,
+                    reason = %candidate.reason,
+                    "admission: queued for user review"
+                );
+            }
+            if !admission.rejected.is_empty() {
+                tracing::debug!(
+                    target: "neph_memory",
+                    count = admission.rejected.len(),
+                    "admission: discarded items"
+                );
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                target: "neph_memory",
+                error = %e,
+                "post-session admission failed — transcript not admitted"
+            );
+        }
+    }
 }

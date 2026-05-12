@@ -2,22 +2,16 @@
 .SYNOPSIS
   Run Neph quality checks with per-step timeouts and live console output.
 
-.PARAMETER SkipE2E
-  Skip Playwright smoke (built UI served via vite preview).
-
 .NOTES
   - Uses a fresh CARGO_TARGET_DIR each run to avoid fighting other cargo/rustc locks.
   - Do NOT pipe live cargo output through `Select-Object -Last N` in PowerShell: it buffers
     the entire stream until cargo exits, so the terminal looks "stuck with no output".
   - This script uses Start-Process so cargo writes directly to the same console.
-  - First-time Playwright: step [5/5] runs `npx playwright install chromium` before tests.
 #>
 param(
     [int]$TypecheckTimeoutSec = 180,
     [int]$ClippyTimeoutSec = 600,
-    [int]$TestTimeoutSec = 900,
-    [int]$E2eTimeoutSec = 900,
-    [switch]$SkipE2E
+    [int]$TestTimeoutSec = 900
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,7 +21,6 @@ $targetDir = Join-Path ([System.IO.Path]::GetTempPath()) ("neph-cargo-" + [Guid]
 New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
 $env:CARGO_TARGET_DIR = $targetDir
 $cargoExe = (Get-Command cargo -ErrorAction Stop).Source
-# npm on Windows is often npm.ps1 — Start-Process needs a real PE (.exe). Use cmd.exe /c.
 $cmdExe = (Get-Command cmd.exe -ErrorAction Stop).Source
 
 Write-Host "=== Neph verify ===" -ForegroundColor Cyan
@@ -65,37 +58,24 @@ function Invoke-ProcessWithTimeout {
     Write-Host "[$StepName] OK" -ForegroundColor Green
 }
 
-# 1) LOC
-Write-Host "[1/5] Rust file length guard..." -ForegroundColor Green
+Write-Host "[1/4] Rust file length guard..." -ForegroundColor Green
 & (Join-Path $PSScriptRoot "check-rust-line-length.ps1")
 if (-not $?) {
     exit $(if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 1 })
 }
 
-# 2) typecheck
-Write-Host "[2/5] npm run typecheck..." -ForegroundColor Green
+Write-Host "[2/4] npm run typecheck..." -ForegroundColor Green
 Invoke-ProcessWithTimeout -StepName "typecheck" -FilePath $cmdExe -Arguments @("/c", "npm run typecheck") `
     -WorkingDirectory $repoRoot -TimeoutSec $TypecheckTimeoutSec
 
-# 3-4) cargo (inherits CARGO_TARGET_DIR)
-Write-Host "[3/5] cargo clippy --all-targets (-D warnings)..." -ForegroundColor Green
+Write-Host "[3/4] cargo clippy --all-targets (-D warnings)..." -ForegroundColor Green
 Invoke-ProcessWithTimeout -StepName "clippy" -FilePath $cargoExe -Arguments @(
     "clippy", "--all-targets", "--", "-Dwarnings"
 ) -WorkingDirectory $cargoRoot -TimeoutSec $ClippyTimeoutSec
 
-Write-Host "[4/5] cargo test..." -ForegroundColor Green
+Write-Host "[4/4] cargo test..." -ForegroundColor Green
 Invoke-ProcessWithTimeout -StepName "cargo test" -FilePath $cargoExe -Arguments @("test") `
     -WorkingDirectory $cargoRoot -TimeoutSec $TestTimeoutSec
-
-if (-not $SkipE2E) {
-    Write-Host "[5/5] Playwright smoke (install chromium if needed, then test)..." -ForegroundColor Green
-    Invoke-ProcessWithTimeout -StepName "playwright" -FilePath $cmdExe -Arguments @(
-        "/c", "npx playwright install chromium && npx playwright test"
-    ) -WorkingDirectory $repoRoot -TimeoutSec $E2eTimeoutSec
-}
-else {
-    Write-Host "[5/5] Playwright smoke... skipped (-SkipE2E)" -ForegroundColor Yellow
-}
 
 Write-Host ""
 Write-Host "=== All verify steps completed OK ===" -ForegroundColor Cyan

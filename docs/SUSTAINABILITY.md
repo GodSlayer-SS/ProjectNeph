@@ -11,7 +11,7 @@ Skip this when deadlines demand it, but **do not** let “every day is a crunch 
 
 ## Scope
 
-- The recovery plan in `.cursor/plans` is the **scope authority**; “cool ideas” go to a **GitHub issue** or `docs/V0_2_PLAN.md`, not into `main` on impulse.
+- **`Blueprint.md`** and the recovery plan in `.cursor/plans` are the **scope authority**; “cool ideas” go to a **GitHub issue** or `docs/FUTURE.md`, not into `main` on impulse.
 
 ## Support load
 

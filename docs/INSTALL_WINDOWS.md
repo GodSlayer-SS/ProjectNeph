@@ -1,26 +1,59 @@
-# Install on Windows (Unsigned v0.1)
+# Windows: install, runtime, and troubleshooting
 
-## Installer
-- Download the latest NSIS installer from GitHub Releases.
-- Run the installer and complete the setup wizard.
-- The bundle uses **WebView2 Evergreen** via an embedded bootstrapper (small size increase, needs network during install unless the runtime is already present). If the UI is blank, install or repair the runtime from [Microsoft’s WebView2 page](https://developer.microsoft.com/microsoft-edge/webview2/).
+For **developer prerequisites** (Git, Rust, Node, Python, MSVC, WebView2 SDK expectations), read **[`SETUP.md`](SETUP.md)** first.
 
-## SmartScreen Warning
-- Because v0.1 is unsigned, Windows SmartScreen may show "Windows protected your PC".
-- Click **More info** then **Run anyway** if you trust the release origin.
-- Verify download source is the official GitHub release page before proceeding.
+For **what is implemented vs the product blueprint**, see **[`BLUEPRINT_STATUS.md`](BLUEPRINT_STATUS.md)**.
+
+---
+
+## End-user installer (releases)
+
+- Download the latest **NSIS** installer from **GitHub Releases** (when published).
+- The bundle targets **WebView2 Evergreen** (bootstrapper may download runtime during install). If the window is blank, install or repair from [Microsoft’s WebView2 page](https://developer.microsoft.com/microsoft-edge/webview2/).
+
+## SmartScreen (unsigned builds)
+
+- Alpha builds may be unsigned: SmartScreen can show “Windows protected your PC”.
+- Use **More info** → **Run anyway** only if you trust the release source (official GitHub release).
 
 ## Antivirus and Controlled folder access
-- Some AV products may quarantine a new binary; use your vendor’s “restore / allow” flow and optionally exclude the install folder and `%LOCALAPPDATA%\Neph`.
-- If **Controlled folder access** (ransomware protection) is on, allow **Neph** under *Windows Security → Virus & threat protection → Ransomware protection → Allow an app through Controlled folder access* if file moves/deletes fail with access denied.
 
-## ONNX / ML-heavy builds (optional)
-- If you ship or side-load ONNX or GPU inference DLLs, some AV heuristics flag them. Document expected DLL names and consider code signing for anything beyond local dev.
+- Allow/quarantine restore for the app if AV blocks a fresh binary.
+- If **Controlled folder access** is on, allow Neph under *Windows Security → Virus & threat protection → Ransomware protection* if file moves fail.
+
+## ONNX / ML-heavy paths (optional)
+
+- Optional ONNX / GPU DLLs can trigger heuristics on some AV products. Prefer signed releases for distribution; for local dev, document any restored binaries.
 
 ## Troubleshooting
-- If install fails, run installer as Administrator.
-- If antivirus blocks the binary, restore and add an exception for the install directory.
-- Diagnostic and crash logs: `%LOCALAPPDATA%\Neph\logs\` (rolling daily `neph.*` files). File an issue from Settings > About > Report Issue and attach the latest log when possible.
+
+- Re-run installer as Administrator if setup fails.
+- Logs: `%LOCALAPPDATA%\Neph\logs\` (rolling `neph.*`). Use **Settings → About** to report issues with the latest log attached.
 
 ## Hotkey (IME)
-- Default palette hotkey is **Ctrl+Space**. On some East Asian IMEs that combination toggles input mode instead of reaching Neph. Use **Settings → General** to pick **Ctrl+Shift+Space** or **Alt+Space**, then **restart Neph**.
+
+- Default palette hotkey is **Ctrl+Space**. Some IMEs capture it — use **Settings → General** for **Ctrl+Shift+Space** or **Alt+Space**, then restart the app.
+
+---
+
+## Phase 3: Browser automation (optional)
+
+Browser tools need the **Playwright sidecar** and **Node 20+**.
+
+```powershell
+.\scripts\setup_nodeside.ps1
+node apps\nodeside\server.js
+```
+
+Pipe: `\\.\pipe\NephNodeSide`. The desktop app connects when a browser tool runs.
+
+### Profile isolation
+
+| Profile | Tier | Purpose |
+|---------|------|---------|
+| `nephis-research` | Green | Anonymous research |
+| `nephis-tools` | Yellow | Automation / forms |
+| `nephis-personal` | Red | Logged-in sessions — explicit args + confirmation |
+| `nephis-throwaway` | Green | Disposable context |
+
+Personal-profile tools require `explicit_personal=true` in the manifest and user confirmation.

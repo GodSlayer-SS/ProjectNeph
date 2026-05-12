@@ -6,108 +6,30 @@ All notable changes to this project are recorded in this file.
 
 ### Added
 
-- Private-roadmap docs for the new direction: `PRIVATE_ROADMAP.md` and `REMAINING_BLUEPRINT_PLAN.md`.
-- Trust-core backend modules for current architecture goals:
-  - `src-tauri/src/model_router.rs`
-  - `src-tauri/src/agent.rs`
-  - `src-tauri/src/embeddings.rs`
-  - `src-tauri/src/network_allowlist.rs`
-  - `src-tauri/src/skills.rs`
-  - `src-tauri/src/ctx/*` (clipboard, active window, screenshot, OCR, snapshot composition)
-- New migration `V7__scheduled_jobs.sql` to support reminder/proactive scheduling flows.
-- Tool system modularization to `src-tauri/src/tools/` (`mod`, `risk`, `schema`, `preview`, `registry`).
-- New/expanded command surfaces and flows:
-  - `>ctx`, `>websearch`, `>webfetch`, `>codeexplain`, `>codefix`, `>pdfread`, `>repo`
-  - `>skills`, `>runskill`, `>dailybrief`, `>patch`, `>test`, `>voice`, `>snip`
-- Network egress telemetry (`neph_net`) and router decision telemetry (`neph_router`) for auditability.
-- Frontend streaming listeners for `llm:token`, `llm:done`, and `llm:error`, plus quick action buttons for context/screenshot/voice/brief.
+- **`Blueprint.md`** at repo root: Nephis Council Round 2 definitive architecture and phased roadmap.
+- **`docs/SETUP.md`**: Windows developer install checklist (Git, MSVC Build Tools, Rust, Node 20+, Python 3.11+, WebView2).
+- **`docs/BLUEPRINT_STATUS.md`**: implementation status vs blueprint phases.
+- **Nephis architecture spine**: `src-tauri/src/traits/`, `actors/`, `domains/`, `memory/` (hot/warm/cold LanceDB, admission), `providers/`, `ipc/` (pyside, nodeside, Groq STT), `mcp/` stubs, `bus.rs`.
+- **Python ML sidecar** (`apps/pyside/`) with `scripts/install_pyside.py`; **Node Playwright sidecar** (`apps/nodeside/`) with `scripts/setup_nodeside.ps1`.
+- **Voice pipeline** (push-to-talk, barge-in, streaming STT/LLM/TTS) and **orb** UI (WebGL v1, gated v2).
+- **`apps/desktop/tools.toml`**: versioned tool manifest with domain + egress metadata.
 
 ### Changed
 
-- Private pivot executed: public-launch/scaffolding docs and scripts were archived under `archive/pre-pivot/`; active docs now focus on private iteration.
-- Provider surface narrowed to `groq`, `gemini`, `openrouter` in both UI and backend allowlists; legacy OpenAI/Anthropic-first assumptions removed.
-- Tauri bundle/runtime path simplified for private use (updater/signing ceremony removed from active path).
-- LLM execution path upgraded from completion-only behavior to provider-native stream callbacks with token event propagation and retry/fallback behavior.
-- Sensitive input handling tightened so cloud routing short-circuits for detected secret-like content.
-- Web tooling hardened with explicit allowlist checks, timeout bounds, URL-per-turn limits, and response-size caps.
-- Memory/embedding diagnostics updated to fastembed-backed mode naming and re-embed startup path.
-- Verification scripts/CI flow simplified around practical private quality gates.
+- **README** and **`docs/ARCHITECTURE.md`** rewritten around Blueprint v2 and sidecars.
+- **`docs/INSTALL_WINDOWS.md`**: links to SETUP + BLUEPRINT_STATUS; browser profile table retained.
+- **`.cursorrules`** / **`docs/SUSTAINABILITY.md`** / **`docs/FUTURE.md`**: scope pointers updated; local LLM deferred per blueprint measurement rule.
+- **`actors/automation.rs`**: desktop tool helpers shared with `state/runner` (Windows WScript.Shell path).
 
 ### Removed
 
-- Legacy monolithic `src-tauri/src/tools.rs` replaced by modular `tools/` layout.
-- Public-launch artifacts from active tree (beta/launch/triage/signing/clean-VM/site content) moved out of active path to archive.
+- **`archive/pre-pivot/`** tree, obsolete planning docs **`docs/V0_2_PLAN.md`**, **`docs/NEPH_TRUST_ROADMAP_v2.md`**.
+- Root **Playwright** test harness: **`playwright.config.ts`**, **`e2e/smoke.spec.ts`**, and root **`playwright`** / **`@playwright/test`** npm dependencies (browser automation remains under **`apps/nodeside`** only).
 
 ### Fixed
 
-- Backend build/lint/test stability after large refactors:
-  - `cargo clippy --all-targets -- -D warnings` passes
-  - `cargo test` passes (security/routing/risk/confirmation suite)
-  - `npm run typecheck` passes
-- Security regression coverage expanded with adversarial and sensitive-routing test cases.
-
-### Added
-
-- **Docs:** `docs/BLUEPRINT_VS_REPO_2026-04.md` (external audit claims vs current code) and `docs/NEPH_TRUST_ROADMAP_v2.md` (prioritized next steps). Plan file `neph_trust-hardening_plan_6fd5acb6` updated with `ops-blueprint-reconcile-2026-04`.
-- **Test:** `state::runner::token_gate_tests::yellow_save_memory_requires_backend_token` — proves yellow `save_memory` requires a valid backend confirmation token (refutes outdated “frontend-only gate” narrative).
-
-- **Startup cold-start budgets**: log `target_ms` alongside measured `ms` for hotkey infra and first LLM completion; **`tracing::warn!`** when over **500ms** / **1500ms** (advisory; see trust plan week-4 metrics).
-
-- `docs/LAUNCH_CHECKLIST.md`: engineering pre-launch items marked done (install docs, changelog, CI/verify, Week 4 WebView2 script); marketing/post-launch rows unchanged.
-
-- **Week-3 / Week-4 retrieval and ops hardening**: FTS5 `file_index_fts` (migration `V6__file_index_fts.sql`) with Rust backfill; `search_files` uses `MATCH` when FTS exists; `initialize_database` returns `DbInitMeta` (`sqlite_vec_loaded`, `embedding_mode`); recovery for interrupted `executing` actions → `failed`; memory recall **half-life decay** and **stub semantic** only when sqlite-vec loads (model id `neph-stub-hash-v0.1`).
-- **LLM token accounting** from provider JSON (`usage` / Anthropic `input_tokens`/`output_tokens`); classify path returns token counts for telemetry.
-- **Periodic WAL checkpoint** thread (`PRAGMA wal_checkpoint(TRUNCATE)` every 30s); startup timing hooks (`record_setup_start`, `log_palette_infra_ready`, `log_first_llm_completion_if_needed`).
-- **Diagnostics**: `export_diagnostic_bundle` (ZIP with `report.json` + recent `neph*` logs); `get_startup_diagnostics` extended with `vectorSearchEnabled`, `embeddingMode`, `dpapiProtectExports`.
-- **Optional DPAPI-protected memory exports** (Windows): `get_dpapi_protect_exports` / `set_dpapi_protect_exports`; Settings → Privacy UI + Memory tab banner when vector is off.
-- **Router eval tests** (`intent_router_eval`): large deterministic prefix suite with pass-rate gate.
-- Docs: `docs/EMBEDDING.md`, `docs/RELEASE_NOTES_v0.1.0-alpha.md`, **`docs/WEEK4_CLEAN_VM.md`** and **`scripts/week4-clean-vm.ps1`** (WebView2 registry preflight for cold-install checks).
-- **Playwright** smoke test (`e2e/smoke.spec.ts`) against **`vite preview`** after production build; `@playwright/test` dev dependency; `npm run test:e2e`.
-- **`scripts/verify.ps1`** is now **[1/8]–[8/8]**: clippy with **`-Dwarnings`**, Playwright install+test, **`npm run tauri build -- --debug`**. Optional **`-SkipE2E`** / **`-SkipTauriBuild`** for faster local loops.
-
-- **Week-2 Windows trust / install hardening**: WebView2 Evergreen **registry check** at startup (warn below minimum), **NSIS `embedBootstrapper`**, language selector on; **rolling daily tracing logs** under `%LOCALAPPDATA%\Neph\logs`; **palette hotkey presets** persisted in SQLite (`settings.palette_hotkey`) with Settings UI + `get_palette_hotkey` / `set_palette_hotkey` / `get_startup_diagnostics` commands.
-- **OneDrive / cloud placeholder** guard before move/rename/delete; clearer **access denied** hint for Defender Controlled folder access.
-- DB migrations **`V4__drop_workflows.sql`**, **`V5__drop_logs_table.sql`** (logs move to files; workflows deferred — see `docs/FUTURE.md`).
-- Unicode path policy test (tempdir).
-- `docs/FUTURE.md` for deferred scope (Ollama, overwrite command, workflows, plugins).
-- Week-1 trust execution path: immutable `ExecutionPlan`, SHA-256 `planHash`, backend **confirmation tokens** (one-shot, TTL 60s) for all yellow/red tools; `run_palette_command` returns structured `PaletteRunResponse` (`completed` / `needConfirmation` / `rejected`).
-- `SafePathPolicy` for file mutations (allowlisted roots, block system locations, traversal hygiene).
-- **LLM prompt-injection gate**: model-routed intents cannot execute yellow/red tools.
-- **Tool args schema validation** (`schemars` + `serde_json` deserialize) and **per-tool redaction** for persisted args / lineage; crash logs redacted via `telemetry`.
-- **IPC rate limiting**: sliding window (120/min) on palette command execution.
-- `command_history` **provenance** + **lineage_json** (`V3__lineage.sql` migration).
-- `tracing` + `tracing-subscriber` with `neph_cmd` target; command input logged redacted.
-- Unit tests: confirmation token binding, rate limit cap, path policy matrix, plan hash stability, secrets empty/disallowed provider, tool arg redaction.
-- `scripts/verify.ps1` and **`npm run verify`**: per-step timeouts (`.NET WaitForExit`), fresh `CARGO_TARGET_DIR` per run, `cmd.exe /c` for npm on Windows (`npm.ps1` is not a valid `Start-Process` target), and docs explaining why `cargo | Select-Object -Last` looks “stuck” with no output.
-- `.cursorrules` and `.cursor/context/*` (architecture, invariants, glossary) for agent-safe editing.
-- `.cursor/prompts/` templates: build, debug, security audit, refactor, performance, tests, release.
-- `.cursorignore` to keep heavy/build artifacts out of default Cursor context.
-- `docs/CURSOR_WORKFLOW.md` (session reset, two-strike rule) and `docs/CONTRIBUTING.md` cross-links.
-- `docs/SUSTAINABILITY.md` (weekend maintenance cadence), `docs/COMPAT.md` (Windows matrix stub), `docs/IPC_BINDINGS.md` (specta policy until codegen), `docs/SIGNING.md` (SignPath / signing honesty).
-- `scripts/check-rust-line-length.ps1` and a CI step to fail if any `src-tauri/src/**/*.rs` file exceeds 500 lines.
-
-### Changed
-
-- Root **`index.html` `<title>`** set to **Neph** (was generic Tauri template text).
-
-- **CI** (`.github/workflows/ci.yml`): `npm run build` before Rust; **Playwright** Chromium install + smoke test; **clippy `-- -D warnings`**; order aligned with local verify.
-- Removed unused **`models::Note`** struct (notes use DB row shapes elsewhere).
-
-- **`V1__init.sql`**: removed `PRAGMA journal_mode` / `foreign_keys` / `synchronous` from the migration body (they ran inside refinery’s migration transaction and could fail with “cannot change into wal mode from within a transaction” on fresh DBs). The same pragmas are applied in Rust immediately after migrations complete. Refinery runs with `set_abort_divergent(false)` so existing databases that already recorded the old V1 checksum keep working without a manual repair.
-
-- **Alpha updater**: `plugins.updater.active` and `bundle.createUpdaterArtifacts` set to **false** until a real signing pubkey and endpoint are configured; removed unused `tauri-plugin-updater` crate dependency.
-- Removed **`>overwritefile` / `overwrite_file`** from the command surface, tools, and router (undo still applies legacy `overwrite` payloads from older DB rows).
-- Removed **Ollama** from provider allowlist, LLM bridge, and Settings UI (deferred per `docs/FUTURE.md`).
-- `docs/INSTALL_WINDOWS.md`: SmartScreen, AV, Controlled folder access, ONNX note, WebView2, IME hotkey troubleshooting.
-- Frontend palette flow uses backend-driven confirmation (dry-run **preview** text from Rust); removed prefix-only gating before invoke.
-- Consolidated tool **risk** authority in `tools.rs` (removed standalone `risk.rs`).
-- Undo remains **JSON payload–based** in `actions.undo_payload` (move/overwrite); a future pass may introduce a fully typed `Tool::undo_plan -> ExecutionPlan` layer without changing user-visible behavior.
-- README: explicit [MIT](LICENSE) link, **alpha** status, honest known limits, document index expanded.
-- `CHANGELOG`: split `0.1.0-alpha.0` (historical batch) from `[Unreleased]`; alpha snapshot called out in the release block.
-- `TRIAGE.md`: **72h** classification target and solo maintainer / no-paid-SLA language.
-- `BETA_PLAN.md`: **3 → 10 → 20** staged rollout and gate language.
-- `CONTRIBUTING.md`: Cursor context, prompt templates, and IPC binding rules.
-- Split backend `state` into focused modules (notes, memory, file ops, command runner, exports, LLM bridge, index) to keep ownership boundaries clear and files under the line-count guard.
+- **`scripts/verify.ps1`**: four steps (line-length guard, typecheck, clippy `-D warnings`, cargo test) after e2e removal.
+- Stale module comments for LanceDB / automation stubs aligned with current code.
 
 ## [0.1.0-alpha.0] - 2026-01-15
 
@@ -180,7 +102,7 @@ All notable changes to this project are recorded in this file.
 
 ### Removed
 
-- None in this tag (scope cuts tracked for future releases; see `docs/V0_2_PLAN.md`).
+- None in this tag (scope cuts tracked for future releases; see `docs/FUTURE.md` and `Blueprint.md`).
 
 ### Fixed
 
@@ -191,5 +113,5 @@ All notable changes to this project are recorded in this file.
 - Re-verified embeddings/hybrid/backup/ux/onboarding/settings batch with passing `npm run typecheck` and `cargo check`.
 - Completed full verification sweep with passing `npm run typecheck`, `cargo check`, `cargo test`, and `npm run build`.
 
-[Unreleased]: https://github.com/mohit/Project-Neph/compare/v0.1.0-alpha.0...HEAD
-[0.1.0-alpha.0]: https://github.com/mohit/Project-Neph/releases/tag/v0.1.0-alpha.0
+[Unreleased]: https://github.com/GodSlayer-SS/ProjectNeph/compare/v0.1.0-alpha.0...HEAD
+[0.1.0-alpha.0]: https://github.com/GodSlayer-SS/ProjectNeph/releases/tag/v0.1.0-alpha.0

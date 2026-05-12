@@ -16,6 +16,9 @@ export type TauriCommandMap = {
   save_provider_key: { provider: string; apiKey: string };
   set_active_provider: { provider: string };
   get_memory: { query?: string };
+  get_admission_queue: undefined;
+  keep_admission: { id: number };
+  discard_admission: { id: number };
   update_memory_item: { id: number; content: string };
   toggle_memory_pin: { id: number; pinned: boolean };
   delete_memory_item: { id: number };
@@ -39,6 +42,9 @@ export type TauriCommandResultMap = {
   save_provider_key: void;
   set_active_provider: void;
   get_memory: MemoryItem[];
+  get_admission_queue: AdmissionItem[];
+  keep_admission: boolean;
+  discard_admission: boolean;
   update_memory_item: boolean;
   toggle_memory_pin: boolean;
   delete_memory_item: boolean;
@@ -78,6 +84,15 @@ export type MemoryItem = {
   created_at: string;
 };
 
+export type AdmissionItem = {
+  id: number;
+  content: string;
+  kind: string | null;
+  score: number | null;
+  decision: string;
+  created_at: string;
+};
+
 export type StartupDiagnostics = {
   paletteHotkey: string;
   webview2Version: string | null;
@@ -88,4 +103,7 @@ export type StartupDiagnostics = {
   vectorSearchEnabled: boolean;
   embeddingMode: string | null;
   dpapiProtectExports: boolean;
+  wakeWordEnabled: boolean;
+  mcpEnabled: boolean;
+  orbV2Enabled: boolean;
 };

@@ -9,6 +9,16 @@ pub struct MemoryItem {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdmissionItem {
+    pub id: i64,
+    pub content: String,
+    pub kind: Option<String>,
+    pub score: Option<f32>,
+    pub decision: String, // keep | discard | pending
+    pub created_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum IntentProvenance {
@@ -88,4 +98,7 @@ pub struct StartupDiagnostics {
     pub vector_search_enabled: bool,
     pub embedding_mode: Option<String>,
     pub dpapi_protect_exports: bool,
+    pub wake_word_enabled: bool,
+    pub mcp_enabled: bool,
+    pub orb_v2_enabled: bool,
 }

@@ -144,6 +144,157 @@ pub fn route_input(input: &str) -> RoutedIntent {
         return user_route("screenshot_analyze".to_string(), serde_json::json!({}), 1.0);
     }
 
+    if let Some(url) = trimmed.strip_prefix(">browse") {
+        return user_route(
+            "browser_read_page".to_string(),
+            serde_json::json!({ "url": url.trim(), "profile": "nephis-research" }),
+            1.0,
+        );
+    }
+
+    if let Some(query) = trimmed.strip_prefix(">bsearch") {
+        return user_route(
+            "browser_search".to_string(),
+            serde_json::json!({ "query": query.trim(), "profile": "nephis-research" }),
+            1.0,
+        );
+    }
+
+    if let Some(url) = trimmed.strip_prefix(">browse-personal") {
+        return user_route(
+            "browser_read_page_personal".to_string(),
+            serde_json::json!({
+                "url": url.trim(),
+                "profile": "nephis-personal",
+                "explicit_personal": true
+            }),
+            1.0,
+        );
+    }
+
+    if let Some(query) = trimmed.strip_prefix(">bsearch-personal") {
+        return user_route(
+            "browser_search_personal".to_string(),
+            serde_json::json!({
+                "query": query.trim(),
+                "profile": "nephis-personal",
+                "explicit_personal": true
+            }),
+            1.0,
+        );
+    }
+
+    if let Some(rest) = trimmed.strip_prefix(">bclick") {
+        let parts: Vec<&str> = rest.trim().splitn(2, '|').collect();
+        return user_route(
+            "browser_click".to_string(),
+            serde_json::json!({
+                "url": parts.first().copied().unwrap_or("").trim(),
+                "selector": parts.get(1).copied().unwrap_or("").trim(),
+                "profile": "nephis-tools"
+            }),
+            1.0,
+        );
+    }
+
+    if let Some(rest) = trimmed.strip_prefix(">bfill") {
+        // format: >bfill <url>|<fields_json>|<submit_selector?>
+        let parts: Vec<&str> = rest.trim().splitn(3, '|').collect();
+        let fields = parts
+            .get(1)
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(s.trim()).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+        return user_route(
+            "browser_fill_form".to_string(),
+            serde_json::json!({
+                "url": parts.first().copied().unwrap_or("").trim(),
+                "fields": fields,
+                "submit_selector": parts.get(2).copied().unwrap_or("").trim(),
+                "profile": "nephis-tools"
+            }),
+            1.0,
+        );
+    }
+
+    if let Some(query) = trimmed.strip_prefix(">focus") {
+        return user_route(
+            "focus_window".to_string(),
+            serde_json::json!({ "query": query.trim() }),
+            1.0,
+        );
+    }
+
+    if let Some(text) = trimmed.strip_prefix(">type") {
+        return user_route(
+            "type_in_active".to_string(),
+            serde_json::json!({ "text": text.trim() }),
+            1.0,
+        );
+    }
+
+    if trimmed == ">readactive" {
+        return user_route("read_active".to_string(), serde_json::json!({}), 1.0);
+    }
+
+    if let Some(root) = trimmed.strip_prefix(">organize") {
+        return user_route(
+            "organize_files_template".to_string(),
+            serde_json::json!({ "root": root.trim(), "dry_run": false }),
+            1.0,
+        );
+    }
+
+    if let Some(request) = trimmed.strip_prefix(">companion") {
+        return user_route(
+            "code_companion_diff".to_string(),
+            serde_json::json!({ "request": request.trim() }),
+            1.0,
+        );
+    }
+
+    if trimmed == ">wakeon" {
+        return user_route(
+            "toggle_wake_word".to_string(),
+            serde_json::json!({ "enabled": true }),
+            1.0,
+        );
+    }
+    if trimmed == ">wakeoff" {
+        return user_route(
+            "toggle_wake_word".to_string(),
+            serde_json::json!({ "enabled": false }),
+            1.0,
+        );
+    }
+    if trimmed == ">mcpon" {
+        return user_route(
+            "toggle_mcp_bridge".to_string(),
+            serde_json::json!({ "enabled": true }),
+            1.0,
+        );
+    }
+    if trimmed == ">mcpoff" {
+        return user_route(
+            "toggle_mcp_bridge".to_string(),
+            serde_json::json!({ "enabled": false }),
+            1.0,
+        );
+    }
+    if trimmed == ">orbv2on" {
+        return user_route(
+            "toggle_orb_v2".to_string(),
+            serde_json::json!({ "enabled": true }),
+            1.0,
+        );
+    }
+    if trimmed == ">orbv2off" {
+        return user_route(
+            "toggle_orb_v2".to_string(),
+            serde_json::json!({ "enabled": false }),
+            1.0,
+        );
+    }
+
     if let Some(rest) = trimmed.strip_prefix(">remind") {
         return user_route(
             "schedule_reminder".to_string(),

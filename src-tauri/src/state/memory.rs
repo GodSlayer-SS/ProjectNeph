@@ -4,7 +4,9 @@ use anyhow::Result;
 use rusqlite::{params, Connection};
 
 use crate::embeddings;
+use crate::memory::cold::ColdMemory;
 use crate::models::MemoryItem;
+use crate::traits::memory::{MemoryItem as TierMemoryItem, MemoryStore, MemoryTier, Query};
 
 use super::AppState;
 
@@ -49,6 +51,16 @@ impl AppState {
         )?;
         let id = conn.last_insert_rowid();
         self.upsert_memory_embedding(&conn, id, content)?;
+        // Phase 2 cold tier (LanceDB). Best effort so warm path remains reliable.
+        let cold = ColdMemory::new();
+        let _ = cold.store(&TierMemoryItem {
+            id: None,
+            kind: kind.to_string(),
+            content: content.to_string(),
+            pinned: false,
+            tier: MemoryTier::Cold,
+            score: None,
+        });
         Ok(())
     }
 
@@ -94,7 +106,30 @@ impl AppState {
             }
         }
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        Ok(scored.into_iter().take(5).map(|(_, c)| c).collect())
+        let mut merged = scored
+            .into_iter()
+            .take(5)
+            .map(|(_, c)| c)
+            .collect::<Vec<_>>();
+
+        // Phase 2 cold tier retrieval merge.
+        let cold = ColdMemory::new();
+        if let Ok(cold_hits) = cold.search(&Query {
+            text: query.to_string(),
+            embedding: Some(query_embedding),
+            limit: 5,
+            kind_filter: None,
+        }) {
+            for hit in cold_hits {
+                if !merged.iter().any(|m| m == &hit.content) {
+                    merged.push(hit.content);
+                }
+                if merged.len() >= 5 {
+                    break;
+                }
+            }
+        }
+        Ok(merged)
     }
 
     pub fn list_memory(&self, query: Option<&str>) -> Result<Vec<MemoryItem>> {
@@ -146,6 +181,15 @@ impl AppState {
         )?;
         if changed > 0 {
             self.upsert_memory_embedding(&conn, id, content)?;
+            let cold = ColdMemory::new();
+            let _ = cold.store(&TierMemoryItem {
+                id: None,
+                kind: "memory".to_string(),
+                content: content.to_string(),
+                pinned: false,
+                tier: MemoryTier::Cold,
+                score: None,
+            });
         }
         Ok(changed > 0)
     }
