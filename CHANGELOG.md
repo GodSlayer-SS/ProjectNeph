@@ -18,13 +18,14 @@ All notable changes to this project are recorded in this file.
 
 - **README** and **`docs/ARCHITECTURE.md`** rewritten around Blueprint v2 and sidecars.
 - **`docs/INSTALL_WINDOWS.md`**: links to SETUP + BLUEPRINT_STATUS; browser profile table retained.
-- **`.cursorrules`** / **`docs/SUSTAINABILITY.md`** / **`docs/FUTURE.md`**: scope pointers updated; local LLM deferred per blueprint measurement rule.
+- **`docs/SUSTAINABILITY.md`** / **`docs/FUTURE.md`**: scope pointers updated; local LLM deferred per blueprint measurement rule.
 - **`actors/automation.rs`**: desktop tool helpers shared with `state/runner` (Windows WScript.Shell path).
 
 ### Removed
 
 - **`archive/pre-pivot/`** tree, obsolete planning docs **`docs/V0_2_PLAN.md`**, **`docs/NEPH_TRUST_ROADMAP_v2.md`**.
 - Root **Playwright** test harness: **`playwright.config.ts`**, **`e2e/smoke.spec.ts`**, and root **`playwright`** / **`@playwright/test`** npm dependencies (browser automation remains under **`apps/nodeside`** only).
+- **Repo-local editor / CI scaffolding:** **`.cursor/`**, **`.cursorignore`**, **`.cursorrules`**, **`.github/`**, **`.vscode/`**, and **`docs/CURSOR_WORKFLOW.md`**. These are no longer tracked so you can recreate them locally as needed; quality gates are **`npm run verify`** and manual **`cargo`** runs.
 
 ### Fixed
 

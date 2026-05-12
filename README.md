@@ -33,6 +33,8 @@ npm run tauri dev
 
 ## Quality commands
 
+Run these locally before merging or cutting a build. **There is no GitHub Actions CI in this repository** (workflows were removed so tooling can be reintroduced on your own terms).
+
 ```powershell
 npm run typecheck
 npm run verify   # line-length guard, typecheck, clippy -D warnings, cargo test

@@ -11,8 +11,8 @@ Skip this when deadlines demand it, but **do not** let “every day is a crunch 
 
 ## Scope
 
-- **`Blueprint.md`** and the recovery plan in `.cursor/plans` are the **scope authority**; “cool ideas” go to a **GitHub issue** or `docs/FUTURE.md`, not into `main` on impulse.
+- **`Blueprint.md`** is the **scope authority**; “cool ideas” go to a **GitHub issue** or `docs/FUTURE.md`, not into `main` on impulse.
 
 ## Support load
 
-- Triage and expectations are in `TRIAGE.md` (72h classification target, not 24/7).
+- Use **GitHub Issues** for bug reports and feature discussion; there is no paid SLA.
